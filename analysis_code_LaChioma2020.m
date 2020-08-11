@@ -84,45 +84,6 @@ for i = 1 : nSFs
 end
 
 
-
-
-
-%%
-
-ExpIDsall = [aDGDap.ROIs.ExpID];
-SpatFreq = str2double(SF);
-SFRoiNrs = find([aDGDap.ROIs.SpatFreq] == SpatFreq);
-ExpIDs = unique(ExpIDsall(SFRoiNrs));
-nExps  = numel(ExpIDs);
-
-
-for e = 1:nExps
-    
-    NNexp(e).BinEdges = Edges;
-    deltaIOPhaseNN = [];
-    D = [];
-    PrefIOPhase = [];
-    PrefIOPhaseIx = [];
-    DIOSFrespRoiNrs_excl = [];
-    PrefIOPhase_excl = [];
-%     deltaIOPhaseNN_mean = [];
-%     deltaIOPhaseNN_eachExp = [];
-%     Dist_um_eachExp        = [];
-    
-    expid = ExpIDs(e);
-    Info = aDGDap.Info{expid};
-    exptag = Info.Exp(1:5);
-
-
-
-
-    save_dir  = ['J:\Alessandro La Chioma\from_I_drive\AnalyzedData\Alessandro\' Info.Mouse '\' Info.Spot '\' Info.Date '\'];
-    FP = load([save_dir 'FieldParameters-' exptag '.mat']);
-    load([save_dir 'ROI-' exptag '.mat']);
-    aDGDap.FP{e} = FP;
-    aDGDap.ROI{e} = ROI;
-end
-
 %% Plot RDC tuning curves (as in Fig. 7A)
 
 % load('Fit__aRDS__V1_LM_RL__lsqcurvefit_asymGauss__TCmax__2020-06-30.mat')
