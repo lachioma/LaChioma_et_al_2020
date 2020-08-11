@@ -66,27 +66,19 @@ Edges = [0,10,20,40:40:200,300,400,Inf];
 PhasesToExclude = [ ];
 nAreas = numel(Areas);
 nSFs = numel(SFs);
-% NNexp=[]; NNall=[]; 
-NNexp45=[]; NNall45=[]; NNexp90=[]; NNall90=[];
+NNexp=[]; NNall=[]; 
 
 for i = 1 : nSFs
     SF = SFs{i};
     NNexp(i).SF = SF; NNall(i).SF = SF;
     for ax = 1 : nAreas
         Area = Areas{ax};
-        if     strcmp(SF,'0.01')
-            aDGDvarname = 'aDGD3';
-        elseif strcmp(SF,'0.05')
-            aDGDvarname = 'aDGD';
-        elseif strcmp(SF,'0.10')
-            aDGDvarname = 'aDGD2';
-        end
-        filename = ['J:\Alessandro La Chioma\from_I_drive\AnalyzedData\Alessandro\DGD\2017-01-06\'...
-                        'vars_' Area '.mat'];
-        aDGDap = load( filename, aDGDvarname );
-        aDGDap = aDGDap.(aDGDvarname);
+
+        filename = [pwd '\Vars\' 'var_DGD_' Area '.mat'];
+        aDGDx = load( filename );
+        aDGDx = aDGDx.('aDGD');
         
-        [NNexp90(i).(Area)] = Map_IOPhase_NearestNeighbor_appended_exclude3( aDGDx, [90,270]       , thr_type, thr_std, thr_di, SF, Edges, PhasesToExclude, plot_figs);
+        [NNexp(i).(Area)] = Map_IOPhase_NearestNeighbor( aDGDx, [90,270], thr_type, thr_std, thr_di, SF, Edges, PhasesToExclude, plot_figs);
 
     end
 end
