@@ -1,4 +1,135 @@
+%% DI distribution (Fig. 2B)
+% You just need to load variable Disp:
+% load('Vars\Disp_DGD_V1_LM_RL.mat');
 
+Areas = {'V1','LM','RL'};
+nAreas = numel(Areas);
+SFs   = {'0.01'};
+nSFs = numel(SFs);
+
+thr_std = 4;
+nbins = 7;
+CC = load_DGD_colors;
+
+for ax = 1 : nAreas
+    Area = Areas{ax};
+    
+    for i = 1 : nSFs
+        SF = SFs{i};
+        s  = find(strcmp({Disp.(Area).SF}, SF));
+        ts = find(Disp.(Area)(s).thr_std==thr_std);
+
+        nExps_tmp = length(Disp.(Area)(s).StatsDI_perExp{ts}.DI_eachExp);
+        DI_distrib_eachExp = nan(nExps_tmp, nbins);
+        for e = 1 : nExps_tmp
+            DI_thisExp = Disp.(Area)(s).StatsDI_perExp{ts}.DI_eachExp{e};
+            [DI_distrib_eachExp(e,:), edges] = histcounts(DI_thisExp, 0:1/nbins:1, 'Normalization','Probability');
+        end
+        DI_distrib_eachExp = DI_distrib_eachExp*100;
+        
+        DI_distrib_meanAcrossExps = mean(DI_distrib_eachExp, 1);
+        DI_distrib_stdAcrossExps  =  std(DI_distrib_eachExp, 0,1);
+        DI_distrib_semAcrossExps  = DI_distrib_stdAcrossExps/sqrt(nExps_tmp);
+
+
+        hdi = figure;
+        dx = (edges(2)-edges(1));
+        xticks = edges(2:end)-dx/2;
+        superbar( xticks, DI_distrib_meanAcrossExps,...
+            'E', DI_distrib_semAcrossExps,...
+            'BarWidth',0.9*dx, 'BarFaceColor', CC.(Areas{ax}){i}, 'BarEdgeColor','none',...
+            'ErrorbarRelativeWidth',0.0, 'ErrorbarLineWidth',3);
+        ylabel('Proportion of cells (%)' );
+        xlim([-0.04 1.04])
+        if strcmp(SF,'0.10')
+            ylim([0 52])
+        else
+            ylim([0 52])
+        end
+        set(gca, 'YTick',[0:10:100])
+        set(gca, 'XTick',[0 1],'XTickLabel',[0 1])
+        xlabel('Disparity selectivity Index')
+        title_str = ['Area ' Area ' - SF ' SF ' cpd'];
+        title( title_str, 'Interpreter','none' ); 
+
+    end
+end
+
+
+%% Nearest Neighbor analysis (appended exps, systematically across Areas and SFs)
+Areas = {'RL'};%, 'LM', 'RL'};
+SFs = {'0.01'};
+thr_type = 1; thr_std  = 4;
+thr_di   = 0.3;
+plot_figs = [];
+Edges = [0,10,20,40:40:200,300,400,Inf];
+PhasesToExclude = [ ];
+nAreas = numel(Areas);
+nSFs = numel(SFs);
+% NNexp=[]; NNall=[]; 
+NNexp45=[]; NNall45=[]; NNexp90=[]; NNall90=[];
+
+for i = 1 : nSFs
+    SF = SFs{i};
+    NNexp(i).SF = SF; NNall(i).SF = SF;
+    for ax = 1 : nAreas
+        Area = Areas{ax};
+        if     strcmp(SF,'0.01')
+            aDGDvarname = 'aDGD3';
+        elseif strcmp(SF,'0.05')
+            aDGDvarname = 'aDGD';
+        elseif strcmp(SF,'0.10')
+            aDGDvarname = 'aDGD2';
+        end
+        filename = ['J:\Alessandro La Chioma\from_I_drive\AnalyzedData\Alessandro\DGD\2017-01-06\'...
+                        'vars_' Area '.mat'];
+        aDGDap = load( filename, aDGDvarname );
+        aDGDap = aDGDap.(aDGDvarname);
+        
+        [NNexp90(i).(Area)] = Map_IOPhase_NearestNeighbor_appended_exclude3( aDGDx, [90,270]       , thr_type, thr_std, thr_di, SF, Edges, PhasesToExclude, plot_figs);
+
+    end
+end
+
+
+
+
+
+%%
+
+ExpIDsall = [aDGDap.ROIs.ExpID];
+SpatFreq = str2double(SF);
+SFRoiNrs = find([aDGDap.ROIs.SpatFreq] == SpatFreq);
+ExpIDs = unique(ExpIDsall(SFRoiNrs));
+nExps  = numel(ExpIDs);
+
+
+for e = 1:nExps
+    
+    NNexp(e).BinEdges = Edges;
+    deltaIOPhaseNN = [];
+    D = [];
+    PrefIOPhase = [];
+    PrefIOPhaseIx = [];
+    DIOSFrespRoiNrs_excl = [];
+    PrefIOPhase_excl = [];
+%     deltaIOPhaseNN_mean = [];
+%     deltaIOPhaseNN_eachExp = [];
+%     Dist_um_eachExp        = [];
+    
+    expid = ExpIDs(e);
+    Info = aDGDap.Info{expid};
+    exptag = Info.Exp(1:5);
+
+
+
+
+    save_dir  = ['J:\Alessandro La Chioma\from_I_drive\AnalyzedData\Alessandro\' Info.Mouse '\' Info.Spot '\' Info.Date '\'];
+    FP = load([save_dir 'FieldParameters-' exptag '.mat']);
+    load([save_dir 'ROI-' exptag '.mat']);
+    aDGDap.FP{e} = FP;
+    aDGDap.ROI{e} = ROI;
+end
 
 %% Plot RDC tuning curves (as in Fig. 7A)
 
