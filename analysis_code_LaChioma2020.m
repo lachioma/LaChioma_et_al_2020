@@ -1,6 +1,6 @@
 %% DI distribution (Fig. 2B)
 % You just need to load variable Disp:
-% load('Vars\Disp_DGD_V1_LM_RL.mat');
+% load([pwd '\Vars\Disp_DGD_V1_LM_RL.mat']);
 
 Areas = {'V1','LM','RL'};
 nAreas = numel(Areas);
@@ -56,8 +56,377 @@ for ax = 1 : nAreas
 end
 
 
-%% Nearest Neighbor analysis (appended exps, systematically across Areas and SFs)
-Areas = {'RL'};%, 'LM', 'RL'};
+%% ODI (Fig. 3A)
+% You just need to load variable OD
+% load([pwd '\Vars\OD_DG_V1_LM_RL.mat']);
+
+
+Areas = {'V1','LM','RL'};
+nAreas = numel(Areas);
+CC = load_DGD_colors(1);
+edges = -1:2/7:1; dx = (edges(2)-edges(1)); xticks = edges(2:end)-dx/2;
+xrange = [-1.1 1.1]; yrange = [-0.8 35]; dy = [10]; 
+c = 2; % color shade
+
+for ax = 1 : nAreas
+    Area = Areas{ax};
+    ODI = OD.(Area);
+    CountODI_EachExp_perc = 100*cat(1, ODI.CountODI_EachExp_perc);
+    CountODI_meanAcrossExps_perc = mean(CountODI_EachExp_perc, 1);
+    CountODI_stdAcrossExps_perc  = std (CountODI_EachExp_perc, 0, 1);
+    nExps_tmp = size(CountODI_EachExp_perc, 1);
+    CountODI_semAcrossExps_perc  = CountODI_stdAcrossExps_perc / sqrt(nExps_tmp);
+
+
+    % Figure: ODI distribution across exps
+    figure;
+        fig_pos = get(gcf, 'position'); fig_pos(3) = fig_pos(3)*1.3; %fig_pos(2) = fig_pos(2)-fig_pos(4)*0.5;
+        set(gcf, 'position',fig_pos); % [left, bottom, width, height]
+
+    hb = superbar( xticks, CountODI_meanAcrossExps_perc,...
+        'E', CountODI_semAcrossExps_perc,...
+        'BarWidth',0.9*dx, 'BarFaceColor', CC.(Areas{ax}){c}, 'BarEdgeColor','none',...
+        'ErrorbarRelativeWidth',0.0, 'ErrorbarLineWidth',3);
+
+    set(gca, 'XTick',[-1 0 1],'XLim',xrange,'XTickLabel',{'-1','0','1'}, 'TickLength',[0.02 0.025])
+    set(gca, 'YTick',[0:dy:200], 'YLim',yrange);
+    xlabel('Ocular Dominance Index (ODI)');
+    ylabel('Proportion of cells (%)')
+    hh = get( hb(1), 'BaseLine');
+    hh.LineStyle = 'none';
+
+end
+
+
+%% DI vs ODI (Fig. 3B)
+% You just need to load variables OD and DIvar
+% load([pwd '\Vars\OD_DG_V1_LM_RL.mat']);
+% load([pwd '\Vars\DIvar_DGD_V1_LM_RL.mat']);
+
+
+Areas = {'V1','LM','RL'};
+SFs   = {'0.01'};
+nSFs = length(SFs);
+nAreas = numel(Areas);
+CC  = load_DGD_colors(1); CC2  = load_DGD_colors(1);
+acircle = 42;
+rangex = [-1.05 1.05]; dx = 0.5; ticklabels = {'-1','','0','','1'};
+rangey = [-0.05 1.05];
+errorbar_width = 0.1; markesize = 10;
+
+Edges = linspace(-1, 1, 7+1);
+nBins = length(Edges) - 1;
+xValBins = mean([Edges(1:end-1);Edges(2:end)]);
+p_anova = nan(nAreas,1);
+
+for ax = 1 : nAreas
+    Area = Areas{ax};
+    ODI = cat(1, OD.(Area).ODI);
+    MI  = abs(ODI);
+    resp_ODI = find(~isnan(ODI));
+    
+    ODIselall = []; DIselall = [];
+    
+    for i = 1 : nSFs
+        SF = SFs{i};
+        s = find( strcmp(DIvar.SF, SF) );
+        
+        DI = DIvar.(Area)(s).DI;
+        
+        resp_DGDsf = DIvar.(Area)(s).resp_DGDthisSF;
+        resp = intersect(resp_DGDsf, resp_ODI);
+        
+        ODIsel = ODI(resp);
+        MIsel  = MI(resp);
+        BIsel  = 1-MIsel;
+        DIsel  = DI(resp);
+    
+        ODIselall = [ODIselall; ODIsel];
+        DIselall  = [DIselall ; DIsel ];
+        
+    end
+        
+    ODIsel_binmean = nan(nBins,1);
+    ODIsel_binsem  = nan(nBins,1);
+
+    [~,~,bins] = histcounts(ODIselall, Edges);
+    for b = 1:nBins
+        binmean = mean( DIselall(bins==b) ) ;
+        binsem  =  std( DIselall(bins==b) ) / sqrt(sum(bins==b));
+        if isempty(binmean), binmean = NaN; binsem = NaN;end;
+        ODIsel_binmean(b) = binmean;
+        ODIsel_binsem(b)  = binsem;
+    end
+
+    %%%% ANOVA test:
+    Group_all = [];
+    DIsel_allbins = [];
+    [~,~,bins] = histcounts(ODIselall, Edges);
+    for b = 1:nBins
+        DIsel_thisbin =  DIselall(bins==b) ;
+        DIsel_allbins = [DIsel_allbins; DIsel_thisbin];
+        Group_thisbin = repmat(b, length(DIsel_thisbin),1);
+        Group_all = [Group_all; Group_thisbin];
+    end
+    TestType = 'KW';
+    p_anova(ax) = perform_anova1(DIsel_allbins, Group_all, TestType);
+    %%%%
+    
+    
+    [rhoMIDI,pMIDI] = corr( DIselall, (ODIselall), 'type', 'Pearson' );
+    
+
+
+    figure; hold on;
+        fig_pos = get(gcf, 'position'); fig_pos(3) = fig_pos(3)*1.0; %fig_pos(2) = fig_pos(2)-fig_pos(4)*0.5;
+        set(gcf, 'position',fig_pos); % [left, bottom, width, height]
+
+    scatter(ODIselall, DIselall, acircle, CC.(Area){2}, 'filled')
+        
+    supererr(xValBins, ODIsel_binmean, [], ODIsel_binsem,...
+        errorbar_width, 'LineWidth',2, 'Color',CC2.(Area){1});
+    plot( xValBins, ODIsel_binmean,...
+        'LineWidth',2,'Color',CC2.(Area){1},'Marker','o','MarkerSize',markesize,'MarkerFaceColor',CC.(Area){1})
+
+
+    xlabel('ODI'); 
+    ylabel('DI');
+    xlim(rangex); ylim(rangey);
+    set(gca, 'XTick',[-1:dx:1],'YTick',[0:dx:1],'XTickLabel',ticklabels);
+
+    str_title = {...
+           ['Area ' Area ' - SF:' ' all pooled' ];...
+           ['CorrCoeff = ' num2str(rhoMIDI,'%3.2f') ' (p=' num2str(pMIDI,'%4.3f') ')' ]};
+    title(str_title, 'Interpreter','none');
+end
+
+
+%% Facilitation index (Fig. 3C)
+% You just need to load variable R:
+% load([pwd '\Vars\R__DGD_V1_LM_RL.mat']);
+
+Which_R = 'Ratio_F_DGD_F_DG_sumLR'; yrange = [0 3]; dy = 0.5;
+% Which_R = 'Ratio_F_DGD_F_DG_maxLR'; yrange = [0 4];  dy = 0.5;
+
+% Which_Mean = 'exps_pooled'; %not implemented
+Which_Mean = 'exp_wise';
+
+% Bar_Orientation = 'v' ;
+Bar_Orientation = 'h' ;
+
+Areas = {'V1','LM','RL'};
+nAreas = numel(Areas);
+SFs   = {'0.01'};
+nSFs = numel(SFs);
+CC = load_DGD_colors(2);
+
+for ax = 1 : nAreas
+    Area = Areas{ax};
+    
+    R_meanAcrossExps = nan(nSFs,1);
+    R_SEMAcrossExps  = nan(nSFs,1);
+    R_AllSFs=[]; Group=[];
+            
+    figure; hold on;
+    
+    for i = 1 : nSFs
+        SF = SFs{i};
+        s  = find(strcmp({R.(Area).SF}, SF));
+
+        if     strcmp(Which_R, 'Ratio_F_DGD_F_DG_sumLR')
+            if     strcmp(Which_Mean, 'exp_wise')
+                R_meanAcrossExps(i) = R.(Area)(s).Ratio_F_DGD_F_DG_sumLR_meanAcrossExps;
+                R_SEMAcrossExps(i)  = R.(Area)(s).Ratio_F_DGD_F_DG_sumLR_semAcrossExps;
+                R_singlevals        = R.(Area)(s).Ratio_F_DGD_F_DG_sumLR_meanEachExp;
+            end
+        elseif strcmp(Which_R, 'Ratio_F_DGD_F_DG_maxLR')
+            if     strcmp(Which_Mean, 'exp_wise')
+                R_meanAcrossExps(i) = R.(Area)(s).Ratio_F_DGD_F_DG_maxLR_meanAcrossExps;
+                R_SEMAcrossExps(i)  = R.(Area)(s).Ratio_F_DGD_F_DG_maxLR_semAcrossExps;
+                R_singlevals        = R.(Area)(s).Ratio_F_DGD_F_DG_maxLR_meanEachExp;
+            end
+        end
+        
+        
+        % for following Significance test
+        R_AllSFs = [R_AllSFs; R_singlevals];
+        Group_tmp = repmat({SF}, numel(R_singlevals),1);
+        Group = [Group; Group_tmp];
+        
+    end
+    
+    [~,P] = perform_anova1(R_AllSFs, Group);
+    P( P>0.05 ) = nan;
+%     P = nan;
+    
+%         hb = bar( i, R_meanAcrossExps, R_SEMAcrossExps, 'FaceColor',CC.(Area){i});
+        superbar( [1:nSFs], R_meanAcrossExps,...
+            'E', R_SEMAcrossExps,...
+            'Orientation', Bar_Orientation,...
+            'BarWidth',[], 'BarFaceColor', CC.(Areas{ax}), 'BarEdgeColor','none',...
+            'ErrorbarRelativeWidth',0.0, 'ErrorbarLineWidth',4,...
+            'P', P,...
+            'PStarShowNS',false,'PLineWidth',1,'PStarBackgroundColor','none','PLineBackingColor','none',...
+            'PStarFontSize',10, 'PLineOffset',0.2 ...
+        );
+
+    
+    if strcmp(Bar_Orientation,'v')
+        set(gca, 'YLim',yrange,'YTick',[0:dy:5]);
+        set(gca, 'XTick',[],'XTickLabel',[])
+    else
+        set(gca, 'XLim',yrange,'XTick',[0:dy:5]);
+        set(gca, 'YTick',[],'YTickLabel',[])
+    end
+    title('Facilitation index')
+
+end
+
+%% Suppression index (Fig. 3C)
+% You just need to load variable R:
+% load([pwd '\Vars\R__DGD_V1_LM_RL.mat']);
+
+% Which_R = 'Ratio_F_DGD_min_F_DG_sumLR'; yrange = [0 0.6];
+Which_R = 'Ratio_F_DGD_min_F_DG_maxLR'; yrange = [0 1]; dy = 0.25;
+
+% Bar_Orientation = 'v' ;
+Bar_Orientation = 'h' ;
+
+Areas = {'V1','LM','RL'};
+nAreas = numel(Areas);
+SFs   = {'0.01'};
+nSFs = numel(SFs);
+CC = load_DGD_colors(2);
+
+for ax = 1 : nAreas
+    Area = Areas{ax};
+    
+    R_meanAcrossExps = nan(nSFs,1);
+    R_SEMAcrossExps  = nan(nSFs,1);
+    R_AllSFs=[]; Group=[];
+    
+    figure; hold on;
+    
+    for i = 1 : nSFs
+        SF = SFs{i};
+        s  = find(strcmp({R.(Area).SF}, SF));
+
+        if     strcmp(Which_R, 'Ratio_F_DGD_min_F_DG_sumLR')
+            R_meanAcrossExps(i) = R.(Area)(s).Ratio_F_DGD_min_F_DG_sumLR_meanAcrossExps;
+            R_SEMAcrossExps(i)  = R.(Area)(s).Ratio_F_DGD_min_F_DG_sumLR_semAcrossExps;
+            R_singlevals        = R.(Area)(s).Ratio_F_DGD_min_F_DG_sumLR_meanEachExp';
+        elseif strcmp(Which_R, 'Ratio_F_DGD_min_F_DG_maxLR')
+            R_meanAcrossExps(i) = R.(Area)(s).Ratio_F_DGD_min_F_DG_maxLR_meanAcrossExps;
+            R_SEMAcrossExps(i)  = R.(Area)(s).Ratio_F_DGD_min_F_DG_maxLR_semAcrossExps;
+            R_singlevals        = R.(Area)(s).Ratio_F_DGD_min_F_DG_maxLR_meanEachExp';
+        end
+
+        
+        % for following Significance test
+        R_AllSFs = [R_AllSFs; R_singlevals];
+        Group_tmp = repmat({SF}, numel(R_singlevals),1);
+        Group = [Group; Group_tmp];
+        
+    end
+
+    [~,P] = perform_anova1(R_AllSFs, Group);
+    P( P>0.05 ) = nan;
+%     P = nan;
+    
+%         hb = bar( i, R_meanAcrossExps, R_SEMAcrossExps, 'FaceColor',CC.(Area){i});
+        hb = superbar( [1:nSFs], R_meanAcrossExps,...
+            'E', R_SEMAcrossExps,...
+            'Orientation', Bar_Orientation,...
+            'BarWidth',[], 'BarFaceColor', 'none', 'BarEdgeColor',CC.(Areas{ax}),'BarLineWidth',10,...
+            'ErrorbarRelativeWidth',0.0, 'ErrorbarLineWidth',4,...
+            'P', P,...
+            'PStarShowNS',false,'PLineWidth',1,'PStarBackgroundColor','none','PLineBackingColor','none',...
+            'PStarFontSize',10, 'PLineOffset',0.1 ...
+        );
+    
+    
+    
+    hh = get( hb(1), 'BaseLine'); hh.LineStyle = 'none';
+    if strcmp(Bar_Orientation,'v')
+        set(gca, 'YLim',yrange,'YTick',[-2:0.25:5]);
+        set(gca, 'XTick',[],'XTickLabel',[])
+    else
+        set(gca, 'XLim',yrange,'XTick',[0:dy:5]);
+        set(gca, 'YTick',[],'YTickLabel',[])
+    end 
+    title('Suppression index')
+
+end
+
+
+
+%% Facilitation and suppression: F_DGD vs. F_DG (Fig. 3C)
+% You just need to load variable R:
+% load([pwd '\Vars\R__DGD_V1_LM_RL.mat']);
+
+Areas = {'V1','LM','RL'};
+nAreas = numel(Areas);
+SFs   = {'0.01'};
+nSFs = numel(SFs);
+thr_std = 4;
+CC = load_DGD_colors(2);
+acircle = 72; color_diagonal = [1 1 1]*0.5;
+
+for ax = 1 : nAreas
+    Area = Areas{ax};
+    for i = 1 : nSFs
+        SF = SFs{i};
+        s  = find(strcmp({Rall.(Area).SF}, SF));
+        
+        F_DGD_max_bothDG_DGD = Rall.(Area)(s).F_DGD_max_bothDG_DGD;
+        F_DGD_min_bothDG_DGD = Rall.(Area)(s).F_DGD_min_bothDG_DGD;
+        F_DG_maxLR_bothDG_DGD = Rall.(Area)(s).F_DG_maxLR_bothDG_DGD;
+        F_DG_sumLR_bothDG_DGD = Rall.(Area)(s).F_DG_sumLR_bothDG_DGD;
+        
+        figure; hs=[];
+            cbar_range = [0 1];
+            axes_range_1 = [-2.5/30 2.5]; axes_range_2 = [-1/30 1];
+
+        hold on
+        scatter(F_DG_sumLR_bothDG_DGD, F_DGD_max_bothDG_DGD, acircle, CC.(Area){i}, 'filled');
+        h = plot([0 10],[0 10],'LineStyle','--','Color',color_diagonal);
+        uistack(h, 'down');
+        xlim(axes_range_1); ylim(axes_range_1);
+        set(gca, 'XTick',[0:10], 'YTick',[0:10])
+        xlabel('\DeltaF/F_{Monoc Left+Right}'); %xlabel('F DG sumLR (\DeltaF/F)')
+        ylabel('\DeltaF/F_{Binoc Peak}'); %ylabel('F DGD peak (\DeltaF/F)')
+        axis square
+            if SaveFigures
+%                 title(''); xlabel(''); ylabel(''); set(gca,'XTickLabel',[]); set(gca,'YTickLabel',[]);
+                title(''); axis_pos = get(gca, 'Position');
+                filename = ['I:\Alessandro La Chioma\AnalyzedData\Alessandro\DGD\2017-01-06\Figures Poster\'...
+                                'F_DGD_peak vs F_DG ' 'Area ' Area ' SF ' SF '.eps'];
+                set(gca, 'Color', 'none'); set(gcf, 'Color', 'none');
+                set(gca, 'Position',axis_pos);
+                export_fig(gcf, filename, '-eps', '-q101', '-transparent')
+            end
+        %
+        figure;
+%         hs(2) = subaxis(1,2,2);
+        hold on
+        scatter(F_DG_maxLR_bothDG_DGD, F_DGD_min_bothDG_DGD, acircle-10, CC.(Area){i},'LineWidth',1);
+%         scatter(F_DG_sumLR_bothDG_DGD, F_DGD_min_bothDG_DGD, acircle-10, CC.(Area){i},'LineWidth',1);
+        h = plot([0 10],[0 10],'LineStyle','--','Color',color_diagonal);
+        uistack(h, 'down');
+        xlim(axes_range_2); ylim(axes_range_2);
+        set(gca, 'XTick',[0:0.5:10], 'YTick',[0:0.5:10])
+        xlabel('\DeltaF/F_{Monoc Max}'); %xlabel('F DG maxLR (\DeltaF/F)')
+        ylabel('\DeltaF/F_{Binoc Null}'); %ylabel('F DGD min (\DeltaF/F)')
+        axis square
+
+    end
+end
+
+
+
+
+%% Neighbor analysis (Fig. 4B)
+Areas = {'V1'};%, 'LM', 'RL'};
 SFs = {'0.01'};
 thr_type = 1; thr_std  = 4;
 thr_di   = 0.3;
@@ -79,9 +448,296 @@ for i = 1 : nSFs
         aDGDx = aDGDx.('aDGD');
         
         [NNexp(i).(Area)] = Map_IOPhase_NearestNeighbor( aDGDx, [90,270], thr_type, thr_std, thr_di, SF, Edges, PhasesToExclude, plot_figs);
+    end
+end
+
+
+%% Occurrences of disparity preference (Fig. 4C)
+% You just need to load variable TC_A
+% load([pwd '\Vars\TC_A__DGD_V1_LM_RL.mat']);
+
+ 
+Areas = {'V1','LM','RL'};
+nAreas = numel(Areas);
+SFs   = {'0.01'};
+nSFs = numel(SFs);
+CC = load_DGD_colors(1);
+IOPhases = [0:45:360]; xrange = [-30 390];
+yrange = [0 50; 0 50; 0 120]; dy = [10, 10, 20]; 
+
+for ax = 1 : nAreas
+    Area = Areas{ax};
+    for i = 1 : nSFs
+        SF = SFs{i};
+        s = find( strcmp(TC_A.SF, SF) );
+        
+        CountPrefIOPhase_norm_meanAcrossExps = TC_A.(Area)(s).DD_Centered.CountPrefIOPhase_norm_meanAcrossExps;
+        CountPrefIOPhase_norm_semAcrossExps  = TC_A.(Area)(s).DD_Centered.CountPrefIOPhase_norm_semAcrossExps;
+        % make distribution symmetric, adding x=360=0 at the end:
+        CountPrefIOPhase_norm_meanAcrossExps = 100*[CountPrefIOPhase_norm_meanAcrossExps, CountPrefIOPhase_norm_meanAcrossExps(1)];
+        CountPrefIOPhase_norm_semAcrossExps  = 100*[CountPrefIOPhase_norm_semAcrossExps , CountPrefIOPhase_norm_semAcrossExps(1) ];
+
+        hdi = figure;
+        superbar( IOPhases, CountPrefIOPhase_norm_meanAcrossExps,...
+            'E', CountPrefIOPhase_norm_semAcrossExps,...
+            'BarWidth',0.85*45, 'BarFaceColor', CC.(Areas{ax}){s}, 'BarEdgeColor','none',...
+            'ErrorbarRelativeWidth',0.0, 'ErrorbarLineWidth',2);
+        
+        set(gca, 'XTick',IOPhases,'XTickLabel',IOPhases,'XLim',xrange)
+        set(gca, 'YTick',[0:dy(s):100], 'YLim',yrange(s,:));
+        ylabel('Proportion of cells (%)' );
+        xlabel('Disparity preference (phase deg)');
+        title({ ['Area ' Area ' - SF ' SF ' cpd'] })
 
     end
 end
+
+
+
+%% Noise correlations (distribution) (Fig. 5A)
+% You just need to load variables NC
+% load([pwd '\Vars\NC_DGD_V1_LM_RL.mat']);
+
+        NC = NC00;
+        
+Areas = {'V1','LM','RL'};
+nAreas = numel(Areas);
+CC = load_DGD_colors(1); c = 2;
+xrange = [-0.5 0.5]; dx = 0.25;
+
+for ax = 1:nAreas
+    Area = Areas{ax};
+        
+    NCv_allExpsPooled = NC.(Area).NCv_allExpsPooled;
+
+    [NC_bincounts, edges] = histcounts(NCv_allExpsPooled, [-0.5:0.01:0.5]);
+
+    figure; % #1
+        fig_pos = get(gcf, 'position'); % fig_pos(3) = fig_pos(3)*1.5;
+        set(gcf, 'position',fig_pos); % [left, bottom, width, height]
+        ddx = (edges(2)-edges(1));
+        xticks = edges(2:end)-ddx/2;
+    superbar( xticks, NC_bincounts,...
+        'BarWidth',1*ddx, 'BarFaceColor', CC.(Areas{ax}){i}, 'BarEdgeColor','none');
+
+    title({['nPairs=' num2str(numel(NCv_allExpsPooled))];...
+           ['MeanAll=' num2str(mean(NCv_allExpsPooled)) ' - ' 'Mean=' num2str(NC.(Area).NC_meanAcrossExps,'%4.3f') ]...
+           });
+    xlabel('Pairwise noise correlation')
+    ylabel('# pairs')
+    set(gca,'XLim',xrange,'XTick',[xrange(1):dx:xrange(2)],'XTickLabel',num2cell([xrange(1):dx:xrange(2)]))
+
+end
+
+
+%% Noise correlations vs. Distance vs. disparity preference difference (Fig. 5B)
+% You just need to load variables NC
+% load([pwd '\Vars\NC_DGD_V1_LM_RL.mat']);
+
+        NC = NC03;
+
+Areas = {'V1','LM','RL'};
+nAreas = numel(Areas);
+
+nBinsDist = NC.(Areas{1})(1).nBinsDist; nBinsIOP = NC.(Areas{1})(1).nBinsIOP;
+EdgesDist = NC.(Areas{1})(1).EdgesDist; xvalsEdges = EdgesDist(1:end-1) ;
+dist_limit = 250; dix = find(EdgesDist>dist_limit, 1) -1;
+
+Palettes = {'Blues','Greens','Oranges'};
+for ax = 1 : nAreas
+    colors = cbrewer2(Palettes{ax}, 64);
+    colors = flipud(colors); % puts red on top, blue at the bottom
+    dc = 0.02;
+    colors = colors - repmat([dc dc dc],64,1); colors(colors<0)=0;
+    CCmap{ax} = colors;
+end
+
+for ax = 1:nAreas
+    Area = Areas{ax};
+
+    NC_vs_Dist_vs_IOP_allPairsPooled = NC.(Area).NC_vs_Dist_vs_IOP_allPairsPooled;
+
+    figure; % #6
+    hold on;
+    imagesc( NC_vs_Dist_vs_IOP_allPairsPooled((1:dix),:) );
+    cbar_h = colorbar;
+    cbar_h.TickDirection = 'in'; cbar_h.Box = 'off';
+    ylabel(cbar_h,'Noise correlation','rotation',270, 'VerticalAlignment','bottom', 'FontSize',14  )
+%         colormap('hot');
+    colormap(CCmap{ax});
+    set(gca,'YDir','normal')
+    set(gca,'XTick',[1:nBinsIOP], 'XTickLabel',[0:45:180])
+    axis tight
+    axis square;
+    set(gca, 'YTick',[0:dix]+0.5, 'YTickLabel',xvalsEdges(1:dix+1))
+    xlabel('Preferred disparity difference (deg)');
+    ylabel(['Intra-pair distance (' char(181) 'm)'])
+    set(gca,'LineWidth',2)
+    box on 
+
+end
+
+%% Noise Correlations, perform shuffling (in preparation for Fig. 5C,D)
+
+% load([pwd '\Vars\NC_DGD_V1_LM_RL.mat']);
+
+        NC = NC03;
+
+nShuffles = 1000;
+Areas = {'V1','LM','RL'};
+nAreas = numel(Areas);
+for ax = 1 : nAreas
+    Area = Areas{ax};
+    NCsh.(Area) = NoiseCorr_DGD_Shuffling(NC.(Area), nShuffles);
+end
+
+%% Noise Correlations vs. cortical distance (w/ shuffles) (Fig. 5C)
+% Before this section, run the section:
+% %% Noise Correlations, perform shuffling
+
+Areas = {'V1','LM','RL'};
+nAreas = numel(Areas);
+or = 2;
+%
+EdgesDist = NC.(Areas{1})(1).EdgesDist; dx = diff(EdgesDist(1:2)); xvalsEdges = EdgesDist(1:end-1) +dx/2 ;
+dist_limit = 200; dix = find(EdgesDist>dist_limit, 1);
+linestyle = '-'; markersize = 12; markerstyle = 'o';
+errorbar_width = 0;
+yrange = [-0.01 0.05]; dy = 0.01;
+
+for ax = 1:nAreas
+    Area = Areas{ax};
+
+    MarkerFaceColor = CC.(Area){i};
+
+    NCmean_Dist_perBin_acrossExps = NCsh.(Area).NCmean_Dist_perBin_acrossExps(:,or);
+    NCsem_Dist_perBin_acrossExps  = NCsh.(Area).NCsem_Dist_perBin_acrossExps(:,or);
+
+    figure; hold on;
+
+    h = plot( xvalsEdges(1:dix), NCmean_Dist_perBin_acrossExps(1:dix),...
+        'LineWidth',3, 'LineStyle',linestyle, 'Color',CC.(Area){i},...
+        'Marker',markerstyle, 'MarkerFaceColor',MarkerFaceColor,'MarkerSize',markersize);
+    supererr( xvalsEdges(1:dix), NCmean_Dist_perBin_acrossExps(1:dix), [], NCsem_Dist_perBin_acrossExps(1:dix),...
+        errorbar_width, 'LineWidth',2, 'Color',CC.(Area){i});
+    plot( xvalsEdges(1:dix), NCsh.(Area).NCmean_Dist_perBin_eachExp_shuf.prctile975(1:dix,or),...
+        'LineWidth',1, 'LineStyle',':', 'Color',CC.(Area){i},...
+        'Marker','none', 'MarkerFaceColor',MarkerFaceColor,'MarkerSize',markersize/2);
+    plot( xvalsEdges(1:dix), NCsh.(Area).NCmean_Dist_perBin_eachExp_shuf.prctile025(1:dix,or),...
+        'LineWidth',1, 'LineStyle',':', 'Color',CC.(Area){i},...
+        'Marker','none', 'MarkerFaceColor',MarkerFaceColor,'MarkerSize',markersize/2);
+    uistack(h, 'top');
+
+    set(gca,'XTick',EdgesDist, 'XLim',[0 EdgesDist(dix)+dx]);
+    set(gca,'YLim',yrange);
+%         set(gca,'YTick',[-1:dy:1]), 'YLim',yrange);
+    xlabel(['Intra pair distance (' char(181) 'm)'])
+    ylabel({['Pairwise noise correlation']})
+
+end
+
+
+%% Noise Correlations vs. disparity preference difference (w/ shuffles) (Fig. 5D)
+% Before this section, run the section:
+% %% Noise Correlations, perform shuffling
+
+        NC = NC03;
+        
+Areas = {'V1','LM','RL'};
+nAreas = numel(Areas);
+CC = load_DGD_colors(1);
+or = 2;
+linestyle = {'-'}; markersize = 12; markerstyle = {'o'};
+errorbar_width = 0;
+yrange = [-0.0101 0.05]; dy = 0.01;
+
+for ax = 1 : nAreas
+    Area = Areas{ax};
+        
+    NCmean_IOPdiff_perBin_acrossExps = NC.(Area).NCmean_IOPdiff_perBin_acrossExps;
+    NCsem_IOPdiff_perBin_acrossExps  = NC.(Area).NCsem_IOPdiff_perBin_acrossExps;
+
+    figure; hold on;
+    MarkerFaceColor = CC.(Area){i};
+
+        h= plot( [0:45:180], NCmean_IOPdiff_perBin_acrossExps(:,or),...
+            'LineWidth',3, 'LineStyle',linestyle, 'Color',CC.(Area){i},...
+            'Marker',markerstyle, 'MarkerFaceColor',MarkerFaceColor,'MarkerSize',markersize);
+        supererr( [0:45:180], NCmean_IOPdiff_perBin_acrossExps(:,or), [], NCsem_IOPdiff_perBin_acrossExps(:,or),...
+            errorbar_width, 'LineWidth',1.5, 'Color',CC.(Area){i});
+
+        plot( [0:45:180], NCsh.(Area).NCmean_IOPdiff_perBin_perOri_eachExp_shuf.prctile975(:,or),...
+            'LineWidth',1, 'LineStyle',':', 'Color',CC.(Area){i},...
+            'Marker','none', 'MarkerFaceColor',MarkerFaceColor,'MarkerSize',markersize/2);
+        plot( [0:45:180], NCsh.(Area).NCmean_IOPdiff_perBin_perOri_eachExp_shuf.prctile025(:,or),...
+            'LineWidth',1, 'LineStyle',':', 'Color',CC.(Area){i},...
+            'Marker','none', 'MarkerFaceColor',MarkerFaceColor,'MarkerSize',markersize/2);
+
+        uistack(h, 'top');
+
+    set(gca,'XTick',[0:45:180], 'XLim',[-20 200]);
+    set(gca,'YTick',[-1:dy:1], 'YLim',yrange);
+    xlabel('Preferred disparity difference')
+    ylabel({['Pairwise noise correlation']})
+
+end
+
+
+%% Population decoding (SVM)
+% Run this section to perform SVM decoding from scratch (this will take
+% many hours, with the default settings). 
+% Alternativerly, run directly the next section, which loads and plots 
+% SVM classifications already computed.
+
+% Areas = {'V1', 'LM', 'RL'};
+Areas = {'V1'};
+nAreas = numel(Areas);
+SF = '0.01';
+
+thr_type = 1;
+thr_std  = 4;
+% nPredictors = [2, 5, 10, 15, 20, 50];
+nPredictors = [2, 5, 10, 15, 20, 40];
+nCombosPred = 20;
+% Directions = [2,4]'; % treat each direction (90 and 270) separately
+Directions = [2,4]; % treat directions (90 and 270) together
+ExpIDs = [];
+Split = 6;
+nShuffles = 100;
+NoiseCorrelationBlind = 0;
+nCVPpermutations = 1;
+CombosStims = [1:8];
+Method = 1;
+
+newdir_name = [pwd '\Vars\' 'SVM_discrimination_new\' 'mc_' datestr(now,'yyyy-mm-dd_HH-MM-SS')];
+mkdir(newdir_name);
+cd(newdir_name);
+
+
+for ax = 1 : nAreas
+    Area = Areas{ax};
+
+    filename = [pwd '\Vars\' 'var_DGD_' Area '.mat'];
+    aDGDx = load( filename );
+    aDGDx = aDGDx.('aDGD');
+    Function_SVM_DGD_appended_v202007(aDGDx, SF, thr_type, thr_std, ExpIDs,...
+            nPredictors, nCombosPred, Directions, Split,...
+            nShuffles, NoiseCorrelationBlind, nCVPpermutations, CombosStims, Method)
+end
+
+
+%% Population decoding (SVM), plot (Fig. 7)
+
+Areas = {'V1', 'LM', 'RL'};
+
+folder = [pwd '\Vars\SVM_discrimination'];
+nAreas = numel(Areas);
+SF = '0.01';
+for ax = 1 : nAreas
+    Area = Areas{ax};
+    S = plot_SVM_DGD_overExps( Area, SF, folder );
+end
+
 
 
 %% Plot RDC tuning curves (as in Fig. 7A)
