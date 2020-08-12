@@ -1,3 +1,8 @@
+
+
+
+
+
 %% DI distribution (Fig. 2B)
 % You just need to load variable Disp:
 % load([pwd '\Vars\Disp_DGD_V1_LM_RL.mat']);
@@ -696,7 +701,6 @@ SF = '0.01';
 
 thr_type = 1;
 thr_std  = 4;
-% nPredictors = [2, 5, 10, 15, 20, 50];
 nPredictors = [2, 5, 10, 15, 20, 40];
 nCombosPred = 20;
 % Directions = [2,4]'; % treat each direction (90 and 270) separately
@@ -711,7 +715,6 @@ Method = 1;
 
 newdir_name = [pwd '\Vars\' 'SVM_discrimination_new\' 'mc_' datestr(now,'yyyy-mm-dd_HH-MM-SS')];
 mkdir(newdir_name);
-cd(newdir_name);
 
 
 for ax = 1 : nAreas
@@ -720,13 +723,13 @@ for ax = 1 : nAreas
     filename = [pwd '\Vars\' 'var_DGD_' Area '.mat'];
     aDGDx = load( filename );
     aDGDx = aDGDx.('aDGD');
-    Function_SVM_DGD_appended_v202007(aDGDx, SF, thr_type, thr_std, ExpIDs,...
+    Function_SVM_DGD(aDGDx, SF, thr_type, thr_std, ExpIDs,...
             nPredictors, nCombosPred, Directions, Split,...
-            nShuffles, NoiseCorrelationBlind, nCVPpermutations, CombosStims, Method)
+            nShuffles, NoiseCorrelationBlind, nCVPpermutations, CombosStims, Method, newdir_name)
 end
 
 
-%% Population decoding (SVM), plot (Fig. 7)
+%% Population decoding (SVM), plot (Fig. 6)
 
 Areas = {'V1', 'LM', 'RL'};
 
@@ -742,7 +745,7 @@ end
 
 %% Plot RDC tuning curves (as in Fig. 7A)
 
-% load('Fit__aRDS__V1_LM_RL__lsqcurvefit_asymGauss__TCmax__2020-06-30.mat')
+% load([pwd '\Vars\Fit__AsymGauss__aRDS__V1_LM_RL.mat')
 
 
 
@@ -852,7 +855,7 @@ end
 
 %% Plot RDC tuning width and asymmetry (Fig. 7C,D)
 %
-% load('Fit__aRDS__V1_LM_RL__lsqcurvefit_asymGauss__TCmax__2020-06-30.mat')
+% load([pwd '\Vars\Fit__AsymGauss__aRDS__V1_LM_RL.mat')
 
 clearvars -except  db aD aD_RDS aD_RPS Fit Fit_RDS Fit_RPS
 
@@ -1085,7 +1088,7 @@ pw_p_bonf = pw_p * 3;
 
 %% Get number of tuned/untuned cells (to run for Figure 8C)
 
-% load('Fit__aRDS__aRDS2__aRDS_aRDS2__V1_LM_RL__lsqcurvefit_gabor__TCmax__2019-10-16.mat')
+% load([pwd '\Vars\Fit__Gabor__aRDS__aRDS2__aRDS_aRDS2__V1_LM_RL.mat')
 
 Areas = {'V1','LM','RL'};
 thr_Rsquared = 0.5;%0.5;
