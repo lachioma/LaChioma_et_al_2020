@@ -743,7 +743,7 @@ end
 
 
 
-%% Plot RDC tuning curves (as in Fig. 7A)
+%% Plot RDS tuning curves (as in Fig. 7A)
 
 % load([pwd '\Vars\Fit__AsymGauss__aRDS__V1_LM_RL.mat')
 
@@ -853,11 +853,11 @@ for ax = 1 : nAreas
 end
 
 
-%% Plot RDC tuning width and asymmetry (Fig. 7C,D)
+%% Plot RDS tuning width and asymmetry (Fig. 7C,D)
 %
 % load([pwd '\Vars\Fit__AsymGauss__aRDS__V1_LM_RL.mat')
 
-clearvars -except  db aD aD_RDS aD_RPS Fit Fit_RDS Fit_RPS
+% clearvars -except  db aD aD_RDS aD_RPS Fit Fit_RDS Fit_RPS
 
 % Responsiveness criteria:
 thr_std = 4;
@@ -1086,7 +1086,7 @@ pw_p = nan(3,1);
 pw_p_bonf = pw_p * 3;
 
 
-%% Get number of tuned/untuned cells (to run for Figure 8C)
+%% Plot number of tuned/untuned cells (to run for Figure 8C)
 
 % load([pwd '\Vars\Fit__Gabor__aRDS__aRDS2__aRDS_aRDS2__V1_LM_RL.mat')
 
@@ -1103,7 +1103,7 @@ if ~isempty(varlist), clear(varlist{:}); end
 N_resp = get_number_tuned_cells(Fit, Areas, RDStype1, RDStype2, RDStype12, ...
                     thr_Rsquared);
 
-%% Fraction tuned/untuned cells with RDC (Fig. 8C)
+%% Fraction tuned/untuned cells with RDS (Fig. 8C)
 % Before this section, run the section:
 % Get number of tuned/untuned cells (to run for Fig. 8C)
 
@@ -1362,3 +1362,450 @@ for ax = 1 : nAreas
     xlabel('Amplitude ratio');
     
 end
+
+
+
+%% Visual field elevation
+% % Load fitted curves of RPS:
+% load([pwd '\Vars\Fit__RPS__V1_LM_RL.mat']);
+% load([pwd '\Vars\db_RDS__V1_LM_RL.mat']);
+% % Load fitted curves of RDS:
+% load([pwd '\Vars\Fit__Gabor__aRDS__aRDS2__aRDS_aRDS2__V1_LM_RL.mat']);
+% or 
+% load([pwd '\Vars\Fit__AsymGauss__aRDS__V1_LM_RL.mat']);
+
+% clearvars -except db Resp aD aD_RDS aD_RPS Fit Fit_RDS Fit_RPS N_resp
+
+thr_type = 1;
+thr_std_rps = 4;
+thr_rep_fraction_rps = 0.5;
+interp_factor = 3;
+smooth_factor = 5;
+thr_Rsquared_rps = 0.5; RFposPeak_RPS_fromFit = 1; 
+StripePosition_type = 'StripePositions_int_deg_Binoc'; % only Binoc available in this dataset.
+
+    db_toInclude_ix = [1:length(db)];% specify indices of db entries to include
+    db_toExclude_ix = [];   % specify indices of db entries to exclude
+    mouse_state_toInclude = 'awake'; % db entries with this mouse state are included
+%     thr_eye_moved = 0.6;  % eye_moved < thr_eye_moved are included
+    only_first_session_of_same_spot = false;
+
+db_toExclude_ix_complementary = [1:length(db)]'; db_toExclude_ix_complementary(ismember(db_toExclude_ix_complementary,db_toExclude_ix)) = [];
+db_toInclude_ix = intersect( db_toInclude_ix, db_toExclude_ix_complementary);
+% db_toInclude_ix = intersect( db_toInclude_ix, find([db.eye_moved_across_spots]<thr_eye_moved) );
+db_toInclude_ix = intersect( db_toInclude_ix, find(strcmp({db.mouse_state},mouse_state_toInclude)) );
+db_toInclude = db(db_toInclude_ix);
+if only_first_session_of_same_spot
+    [db_toInclude, db_ix_toInclude, db_ix_toExclude] =...
+            exclude_spots_imaged_a_second_time(db_toInclude);
+end
+
+% Param from RPS is needed by GetPositionsRPS.m. If running this section
+% from a PC at MPI, Param is going to be loaded for each exp by using the
+% function LoadParam_fromInfo.m. From an external PC (i.e. without archive
+% drive I with all raw data), Param is manually set with the following
+% lines:
+% Param = [];
+Param.screenRes     = [1920 1080];
+Param.pixperdeg     = 8.851785942024335;
+Param.mouse_dist_cm = 14;
+
+Areas = {'V1', 'LM', 'RL'};
+% Areas = {'V1'};
+
+RDStype12   = 'aRDS_aRDS2';
+
+nAreas = numel(Areas);
+
+StripePositions_int_deg_LorR_eachArea = cell(nAreas, 1);
+ExpId_and_RoiNr_eachArea              = cell(nAreas, 1);
+sel_RPS_Binoc                         = cell(nAreas, 1);
+mouse_name = {};
+
+for ax = 1 : nAreas
+    
+    Area = Areas{ax};
+    ai = find(strcmp(Areas(ax),{Fit.Area}));
+    
+    db_RDS_list = [Fit(ai).aRDS.db]';
+    db_RPS_list = [Fit_RPS(ai).aRPS.db]';
+    db_int = Intersect_dbs(db_RDS_list, db_RPS_list);
+    db_int_toInclude = Intersect_dbs(db_int, db_toInclude);
+    
+    nExps = length(Fit(ai).aRDS);
+    PrefDisp_RDS_eachExp                 = cell(1,1);
+    StripePositions_int_deg_LorR_eachExp = cell(1,1);
+    ExpId_and_RoiNr                      = cell(1,1);
+    ee = 0;
+    
+    for e_rds = 1 : nExps
+        
+        db_tmp = Fit(ai).aRDS(e_rds).db;
+        flag_equal = if_Exp_is_in_db( db_tmp, db_int_toInclude );
+
+        if flag_equal == 0
+            disp([ 'Skipping exp '  num2str(e_rds) '/' num2str(nExps) ' (area ' Area ')' ': '  db_tmp.mouse_name ' ' db_tmp.date])
+            StripePositions_int_deg_LorR_eachArea{ai, e_rds} = [];
+            sel_RPS_Binoc{ai, e_rds} = [];
+            continue;
+        else
+            disp([ 'Including exp '  num2str(e_rds) '/' num2str(nExps) ' (area ' Area ')' ': ' db_tmp.mouse_name ' ' db_tmp.date])
+            [~, e_rps] = if_Exp_is_in_db( db_tmp, db_RPS_list );
+        end
+        
+        if thr_std_rps == 4 && thr_type == 1 && thr_rep_fraction_rps == 0.5
+            % as respRDS just take cells in which fit was computed (this
+            % allows to load only Fit_RPS, without aD_RPS)
+            respRPS  = find(~isnan([Fit_RPS(ai).aRPS(e_rps).TC.RFposPeak]));
+        else
+            respRPS  = above_stdThreshold_RPS(aD_RPS(ai).aRPS(e_rps) , thr_std_rps, thr_type, 1, thr_rep_fraction_rps);
+        end
+        
+        if ~isempty(respRPS)
+            ee = ee + 1;
+            mouse_name{ee,ax} = db_tmp.mouse_name;
+        else
+            continue
+        end
+       
+        
+        if RFposPeak_RPS_fromFit
+            [StripePositions_int_deg_Binoc, ~,...
+               ~, ~, StripePositions_deg,...
+               ~] = ...
+                get_RPS_peak( Fit_RPS(ai).aRPS(e_rps), [], Param, respRPS, 'Elevation', 0,...
+                    [], [], RFposPeak_RPS_fromFit, thr_Rsquared_rps,...
+                    respRPS , []);
+        else
+            [StripePositions_int_deg_Binoc, ~,...
+               ~, ~, StripePositions_deg,...
+               ~] = ...
+                get_RPS_peak( aD_RPS(ai).aRPS(e_rps), [], Param, respRPS, 'Elevation', 0,...
+                    interp_factor, smooth_factor, [], [],...
+                    respRPS, []);
+        end
+
+        
+        switch StripePosition_type
+            case 'StripePositions_int_deg_Binoc'
+                StripePositions_int_deg_LorR_eachArea{ai, e_rds} = StripePositions_int_deg_Binoc(~isnan(StripePositions_int_deg_Binoc));
+        end
+        ExpId_and_RoiNr{ee,1}(:,1) = repmat(e_rds, sum(~isnan(StripePositions_int_deg_Binoc)),1);
+        ExpId_and_RoiNr{ee,1}(:,2) = respRPS(~isnan(StripePositions_int_deg_Binoc));
+        sel_RPS_Binoc{ai, e_rds}   = respRPS(~isnan(StripePositions_int_deg_Binoc));
+    end
+    
+    ExpId_and_RoiNr_eachArea{ax} = ExpId_and_RoiNr;
+end
+
+% %% RPS: get ROIs responsive to RPS vs. horizon
+
+thr_elev_low = 0; %deg
+thr_elev_up  = 0; %deg
+
+nExps_tot = size(StripePositions_int_deg_LorR_eachArea, 2);
+StripePositions_int_deg_LorR_All = cell(1,nAreas);
+StripePos_sel                    = cell(1,nAreas);
+ExpId_and_RoiNr_All              = cell(1,nAreas);
+ExpId_and_RoiNr_sel              = cell(1,nAreas);
+Ncells_low                       = nan(nAreas,1);
+Ncells_up                        = nan(nAreas,1);
+sel_RPS_Binoc_low                         = cell(nAreas, nExps_tot);
+sel_RPS_Binoc_up                          = cell(nAreas, nExps_tot);
+StripePositions_int_deg_LorR_eachArea_low = cell(nAreas, nExps_tot);
+StripePositions_int_deg_LorR_eachArea_up  = cell(nAreas, nExps_tot);
+rangeRPS = [-40 40];
+
+for ax = 1 : nAreas
+    
+    StripePositions_int_deg_LorR_All{ax} = cell2mat(StripePositions_int_deg_LorR_eachArea(ax,:)');
+    ExpId_and_RoiNr_All{ax}     = cell2mat(ExpId_and_RoiNr_eachArea{ax});
+
+    rangeRPS_ix = find( StripePositions_int_deg_LorR_All{ax} >= rangeRPS(1) & StripePositions_int_deg_LorR_All{ax} <= rangeRPS(2));
+    StripePos_sel{ax} = StripePositions_int_deg_LorR_All{ax}(rangeRPS_ix);
+    ExpId_and_RoiNr_sel{ax} = ExpId_and_RoiNr_All{ax}(rangeRPS_ix,:);
+    
+    StripePositions_int_deg_LorR_low_ix = find( StripePos_sel{ax} <  thr_elev_low );
+    StripePositions_int_deg_LorR_up_ix  = find( StripePos_sel{ax} >= thr_elev_up  );
+    Ncells_low(ax) = length(StripePositions_int_deg_LorR_low_ix);
+    Ncells_up(ax)  = length(StripePositions_int_deg_LorR_up_ix);
+    
+    for e = 1 : nExps_tot
+        sel_RPS_Binoc_low_ix = find( StripePositions_int_deg_LorR_eachArea{ax,e} <  thr_elev_low );
+        sel_RPS_Binoc_up_ix  = find( StripePositions_int_deg_LorR_eachArea{ax,e} >= thr_elev_up  );
+        sel_RPS_Binoc_low{ax,e} = sel_RPS_Binoc{ax,e}( sel_RPS_Binoc_low_ix );
+        sel_RPS_Binoc_up{ax,e}  = sel_RPS_Binoc{ax,e}( sel_RPS_Binoc_up_ix  );
+        StripePositions_int_deg_LorR_eachArea_low{ax,e} = StripePositions_int_deg_LorR_eachArea{ax,e}(sel_RPS_Binoc_low_ix);
+        StripePositions_int_deg_LorR_eachArea_up{ax,e}  = StripePositions_int_deg_LorR_eachArea{ax,e}(sel_RPS_Binoc_up_ix);
+    end
+end
+
+n_cells = nan(1,nAreas);
+n_exps  = nan(1,nAreas);
+for ax = 1 : nAreas
+    n_cells(ax) = sum(~isnan(StripePos_sel{ax}));
+    n_exps(ax)  = length(unique(ExpId_and_RoiNr_sel{ax}(:,1)));
+end
+
+
+%% Plot fraction RDS tuned/untuned cells vs. horizon (similar to Fig. 8C)
+% Before running this section, run the previous section (%% Visual field elevation)
+% using Gabor fit for RDS: % load([pwd '\Vars\Fit__Gabor__aRDS__aRDS2__aRDS_aRDS2__V1_LM_RL.mat']);
+
+thr_Rsquared = 0.5;%0.5;
+RDStype1  = 'aRDS';
+RDStype2  = 'aRDS2';
+RDStype12 = 'aRDS_aRDS2';
+
+N_resp_low = get_number_tuned_cells(Fit, Areas, RDStype1, RDStype2, RDStype12, ...
+                    thr_Rsquared, sel_RPS_Binoc_low);
+
+N_resp_up  = get_number_tuned_cells(Fit, Areas, RDStype1, RDStype2, RDStype12, ...
+                    thr_Rsquared, sel_RPS_Binoc_up);
+
+% As in Pie charts 2:
+N_resp     = get_number_tuned_cells(Fit, Areas, RDStype1, RDStype2, RDStype12, ...
+                    thr_Rsquared);
+
+                
+                
+%%%
+
+label_str = {'untuned: ';'only RDS-C: ';'only RDS-A: ';'both: '};
+
+%%% Upper visual field
+
+n_respRDS_any_untuned_meanAcrossExps = nan(nAreas, 1);
+n_respRDS_any_tuned_1_only_meanAcrossExps = nan(nAreas, 1);
+n_respRDS_any_tuned_2_only_meanAcrossExps = nan(nAreas, 1);
+n_respRDS_12_tuned_12_meanAcrossExps = nan(nAreas, 1);
+n_respRDS_any_untuned_semAcrossExps = nan(nAreas, 1);
+n_respRDS_any_tuned_1_only_semAcrossExps = nan(nAreas, 1);
+n_respRDS_any_tuned_2_only_semAcrossExps = nan(nAreas, 1);
+n_respRDS_12_tuned_12_semAcrossExps = nan(nAreas, 1);
+
+for ax = 1 : nAreas
+    Area = Areas{ax};
+    ai = find(strcmp(Area,{Fit.Area}));
+    
+    n_respRDS_any_untuned_meanAcrossExps(ax) = nanmean( N_resp_up.n_respRDS_any_untuned_eachExp{ax} ...
+        ./ N_resp_up.n_respRDS_any_eachExp{ax} );
+    n_respRDS_any_tuned_1_only_meanAcrossExps(ax) = nanmean( N_resp_up.n_respRDS_any_tuned_1_only_eachExp{ax} ...
+        ./ N_resp_up.n_respRDS_any_eachExp{ax} );
+    n_respRDS_any_tuned_2_only_meanAcrossExps(ax) = nanmean( N_resp_up.n_respRDS_any_tuned_2_only_eachExp{ax} ...
+        ./ N_resp_up.n_respRDS_any_eachExp{ax} );
+    n_respRDS_12_tuned_12_meanAcrossExps(ax) = nanmean( N_resp_up.n_respRDS_12_tuned_12_eachExp{ax} ...
+        ./ N_resp_up.n_respRDS_any_eachExp{ax} );
+    
+    n_respRDS_any_untuned_semAcrossExps(ax) = nanstd( N_resp_up.n_respRDS_any_untuned_eachExp{ax} ...
+        ./ N_resp_up.n_respRDS_any_eachExp{ax} ) / sqrt(nnz(N_resp_up.n_respRDS_any_eachExp{ax}));
+    n_respRDS_any_tuned_1_only_semAcrossExps(ax) = nanstd( N_resp_up.n_respRDS_any_tuned_1_only_eachExp{ax} ...
+        ./ N_resp_up.n_respRDS_any_eachExp{ax} ) / sqrt(nnz(N_resp_up.n_respRDS_any_eachExp{ax}));
+    n_respRDS_any_tuned_2_only_semAcrossExps(ax) = nanstd( N_resp_up.n_respRDS_any_tuned_2_only_eachExp{ax} ...
+        ./ N_resp_up.n_respRDS_any_eachExp{ax} ) / sqrt(nnz(N_resp_up.n_respRDS_any_eachExp{ax}));
+    n_respRDS_12_tuned_12_semAcrossExps(ax) = nanstd( N_resp_up.n_respRDS_12_tuned_12_eachExp{ax} ...
+        ./ N_resp_up.n_respRDS_any_eachExp{ax} ) / sqrt(nnz(N_resp_up.n_respRDS_any_eachExp{ax}));
+    
+end
+
+CC = load_DGD_colors(1);
+
+figure;
+Y  = [ n_respRDS_any_untuned_meanAcrossExps';
+      n_respRDS_any_tuned_1_only_meanAcrossExps';
+      n_respRDS_any_tuned_2_only_meanAcrossExps';
+      n_respRDS_12_tuned_12_meanAcrossExps' ] * 100;
+EY = [ n_respRDS_any_untuned_semAcrossExps';
+      n_respRDS_any_tuned_1_only_semAcrossExps';
+      n_respRDS_any_tuned_2_only_semAcrossExps';
+      n_respRDS_12_tuned_12_semAcrossExps' ] * 100;
+C = CC.sf1';
+superbar(Y, 'E', EY, 'BarFaceColor', C); 
+set(gca, 'XTick',[1:size(Y,1)], 'XTickLabel',label_str, 'XTickLabelRotation',45)
+set(gca, 'YTick',[0:10:100], 'YLim',[0 100])
+title('Upper visual field')
+
+
+%%% Lower visual field
+
+n_respRDS_any_untuned_meanAcrossExps = nan(nAreas, 1);
+n_respRDS_any_tuned_1_only_meanAcrossExps = nan(nAreas, 1);
+n_respRDS_any_tuned_2_only_meanAcrossExps = nan(nAreas, 1);
+n_respRDS_12_tuned_12_meanAcrossExps = nan(nAreas, 1);
+n_respRDS_any_untuned_semAcrossExps = nan(nAreas, 1);
+n_respRDS_any_tuned_1_only_semAcrossExps = nan(nAreas, 1);
+n_respRDS_any_tuned_2_only_semAcrossExps = nan(nAreas, 1);
+n_respRDS_12_tuned_12_semAcrossExps = nan(nAreas, 1);
+
+for ax = 1 : nAreas
+    Area = Areas{ax};
+    ai = find(strcmp(Area,{Fit.Area}));
+    
+    n_respRDS_any_untuned_meanAcrossExps(ax) = nanmean( N_resp_low.n_respRDS_any_untuned_eachExp{ax} ...
+        ./ N_resp_low.n_respRDS_any_eachExp{ax} );
+    n_respRDS_any_tuned_1_only_meanAcrossExps(ax) = nanmean( N_resp_low.n_respRDS_any_tuned_1_only_eachExp{ax} ...
+        ./ N_resp_low.n_respRDS_any_eachExp{ax} );
+    n_respRDS_any_tuned_2_only_meanAcrossExps(ax) = nanmean( N_resp_low.n_respRDS_any_tuned_2_only_eachExp{ax} ...
+        ./ N_resp_low.n_respRDS_any_eachExp{ax} );
+    n_respRDS_12_tuned_12_meanAcrossExps(ax) = nanmean( N_resp_low.n_respRDS_12_tuned_12_eachExp{ax} ...
+        ./ N_resp_low.n_respRDS_any_eachExp{ax} );
+    
+    n_respRDS_any_untuned_semAcrossExps(ax) = nanstd( N_resp_low.n_respRDS_any_untuned_eachExp{ax} ...
+        ./ N_resp_low.n_respRDS_any_eachExp{ax} ) / sqrt(nnz(N_resp_low.n_respRDS_any_eachExp{ax}));
+    n_respRDS_any_tuned_1_only_semAcrossExps(ax) = nanstd( N_resp_low.n_respRDS_any_tuned_1_only_eachExp{ax} ...
+        ./ N_resp_low.n_respRDS_any_eachExp{ax} ) / sqrt(nnz(N_resp_low.n_respRDS_any_eachExp{ax}));
+    n_respRDS_any_tuned_2_only_semAcrossExps(ax) = nanstd( N_resp_low.n_respRDS_any_tuned_2_only_eachExp{ax} ...
+        ./ N_resp_low.n_respRDS_any_eachExp{ax} ) / sqrt(nnz(N_resp_low.n_respRDS_any_eachExp{ax}));
+    n_respRDS_12_tuned_12_semAcrossExps(ax) = nanstd( N_resp_low.n_respRDS_12_tuned_12_eachExp{ax} ...
+        ./ N_resp_low.n_respRDS_any_eachExp{ax} ) / sqrt(nnz(N_resp_low.n_respRDS_any_eachExp{ax}));
+    
+end
+
+figure;
+Y  = [ n_respRDS_any_untuned_meanAcrossExps';
+      n_respRDS_any_tuned_1_only_meanAcrossExps';
+      n_respRDS_any_tuned_2_only_meanAcrossExps';
+      n_respRDS_12_tuned_12_meanAcrossExps' ] * 100;
+EY = [ n_respRDS_any_untuned_semAcrossExps';
+      n_respRDS_any_tuned_1_only_semAcrossExps';
+      n_respRDS_any_tuned_2_only_semAcrossExps';
+      n_respRDS_12_tuned_12_semAcrossExps' ] * 100;
+C = CC.sf1';
+superbar(Y, 'E', EY, 'BarFaceColor', C); 
+set(gca, 'XTick',[1:size(Y,1)], 'XTickLabel',label_str, 'XTickLabelRotation',45)
+set(gca, 'YTick',[0:10:100], 'YLim',[0 100])
+title('Lower visual field')
+
+
+%% RDS tuning width and asymmetry vs. visual field elevation
+% Before running this section, run
+% %% Visual field elevation using % load([pwd '\Vars\Fit__AsymGauss__aRDS__V1_LM_RL.mat']);
+% %% Plot RDS tuning width and asymmetry (Fig. 7C,D)
+
+
+Areas = {'V1', 'LM', 'RL'};
+nAreas = numel(Areas);
+
+RDStype1 = 'aRDS';
+RDStype = RDStype1;
+
+nExps_max = max([length(Fit(1).(RDStype)), length(Fit(2).(RDStype)), length(Fit(3).(RDStype))]) ;
+
+
+if size(sel_RPS_Binoc, 1) == nAreas
+    sel_RPS_Binoc = sel_RPS_Binoc'; % now it's {e,ax}, as are RDS-related cells
+    StripePositions_int_deg_LorR_eachArea = StripePositions_int_deg_LorR_eachArea';
+end
+selROIs_RDS_RPS_eachExp = cell(nExps_max, nAreas);
+selROIs_RDS_RPS_ixRDS_eachExp = cell(nExps_max, nAreas);
+selROIs_RDS_RPS_ixRPS_eachExp = cell(nExps_max, nAreas);
+SigmaSum_eachExp_sel = cell(nExps_max, nAreas);
+SigmaDelta_eachExp_sel = cell(nExps_max, nAreas);
+StripePositions_int_deg_LorR_eachArea_sel = cell(nExps_max, nAreas);
+StripePositions_allExps_eachArea       = cell(1, nAreas);
+SigmaSum_sel_allExps_eachArea    = cell(1, nAreas);
+SigmaDelta_sel_allExps_eachArea    = cell(1, nAreas);
+    
+for ax = 1 : nAreas
+    Area = Areas{ax};
+    ai = find(strcmp(Area,{Fit.Area}));
+    
+    nExps = length(Fit(ai).(RDStype));
+
+    for e = 1 : nExps
+        selROIs_RDS_RPS_eachExp{e,ax} = intersect(sel_RPS_Binoc{e,ax}, selROIs_eachExp{e,ax});
+        selROIs_RDS_RPS_ixRDS_eachExp{e,ax} = ismember(selROIs_eachExp{e,ax}, selROIs_RDS_RPS_eachExp{e,ax});
+        selROIs_RDS_RPS_ixRPS_eachExp{e,ax} = ismember(sel_RPS_Binoc{e,ax}, selROIs_RDS_RPS_eachExp{e,ax});
+        
+        SigmaSum_eachExp_sel{e,ax} = SigmaSum_eachExp{e,ax}(selROIs_RDS_RPS_ixRDS_eachExp{e,ax});
+        SigmaDelta_eachExp_sel{e,ax} = SigmaDelta_eachExp{e,ax}(selROIs_RDS_RPS_ixRDS_eachExp{e,ax});
+        StripePositions_int_deg_LorR_eachArea_sel{e,ax} = StripePositions_int_deg_LorR_eachArea{e,ax}(selROIs_RDS_RPS_ixRPS_eachExp{e,ax});
+    end
+    SigmaSum_sel_allExps_eachArea{ax} = cell2mat(SigmaSum_eachExp_sel(:,ax));
+    SigmaDelta_sel_allExps_eachArea{ax} = cell2mat(SigmaDelta_eachExp_sel(:,ax));
+    StripePositions_allExps_eachArea{ax}    = cell2mat(StripePositions_int_deg_LorR_eachArea_sel(:,ax));
+end
+
+rangeRPS = [-40 40];
+
+CC = load_DGD_colors(1);
+for ax = 1 : nAreas
+    Area = Areas{ax};
+    
+    figure;
+    plot(StripePositions_allExps_eachArea{ax} , SigmaSum_sel_allExps_eachArea{ax} , 'o', 'Color',CC.(Areas{ax}){1} );
+    set(gca, 'YTick',[0:3:30], 'YLim',[0 30]);
+    set(gca, 'XLim',[min(rangeRPS) max(rangeRPS)]);
+    xlabel('Elevation (deg)')
+    ylabel('Tuning width (deg)')
+    title({[ 'Area ' Areas{ax} ' - n=' num2str(length(StripePositions_allExps_eachArea{ax}))];...
+        ...['correlation r=' num2str(rho(ax),'%3.2f') ' - p' pCorr_plot{ax}];...
+        },'Interpreter','none');
+    box off
+    view([90 -90])
+end
+
+for ax = 1 : nAreas
+    Area = Areas{ax};
+    
+    figure;
+    plot(StripePositions_allExps_eachArea{ax} , SigmaDelta_sel_allExps_eachArea{ax} , 'o', 'Color',CC.(Areas{ax}){1} );
+    set(gca, 'YTick',[-25:2.5:25], 'YLim',[-25 25]);
+    set(gca, 'XLim',[min(rangeRPS) max(rangeRPS)]);
+    xlabel('Elevation (deg)')
+    ylabel('Tuning asymmetry (deg)')
+    title({[ 'Area ' Areas{ax} ' - n=' num2str(length(StripePositions_allExps_eachArea{ax}))];...
+        ...['correlation r=' num2str(rho(ax),'%3.2f') ' - p' pCorr_plot{ax}];...
+        },'Interpreter','none');
+    box off
+    view([90 -90])
+end
+for ax = 1 : nAreas
+    Area = Areas{ax};
+    
+    figure;
+    plot(StripePositions_allExps_eachArea{ax} , abs(SigmaDelta_sel_allExps_eachArea{ax}) , 'o', 'Color',CC.(Areas{ax}){1} );
+    set(gca, 'YTick',[-25:2.5:25], 'YLim',[0 25]);
+    set(gca, 'XLim',[min(rangeRPS) max(rangeRPS)]);
+    xlabel('Elevation (deg)')
+    ylabel('Tuning asymmetry (deg)')
+    title({[ 'Area ' Areas{ax} ' - n=' num2str(length(StripePositions_allExps_eachArea{ax}))];...
+        ...['correlation r=' num2str(rho(ax),'%3.2f') ' - p' pCorr_plot{ax}];...
+        },'Interpreter','none');
+    box off
+    view([90 -90])
+end
+
+
+bin_elev = [-40:10:40];
+n_bins = length(bin_elev)-1;
+SigmaSum_sel_allExps_eachArea_meanEachBin = nan(n_bins, nAreas);
+for ax = 1 : nAreas
+    Area = Areas{ax};
+
+    [N,~,bin] = histcounts(StripePositions_allExps_eachArea{ax}, bin_elev);
+    
+    for b = 1 : n_bins
+        SigmaSum_sel_allExps_eachArea_meanEachBin(b,ax) = mean(SigmaSum_sel_allExps_eachArea{ax}(bin==b));
+    end
+end
+figure
+plot(SigmaSum_sel_allExps_eachArea_meanEachBin)
+legend(Areas)
+title('Tuning width vs. Elevation')
+
+SigmaDelta_sel_allExps_eachArea_meanEachBin = nan(n_bins, nAreas);
+for ax = 1 : nAreas
+    Area = Areas{ax};
+
+    [N,~,bin] = histcounts(StripePositions_allExps_eachArea{ax}, bin_elev);
+    
+    for b = 1 : n_bins
+        SigmaDelta_sel_allExps_eachArea_meanEachBin(b,ax) = mean(abs(SigmaDelta_sel_allExps_eachArea{ax}(bin==b)));
+    end
+end
+figure
+plot(SigmaDelta_sel_allExps_eachArea_meanEachBin)
+legend(Areas)
+title('Tuning width vs. Elevation')
+
