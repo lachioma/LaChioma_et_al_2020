@@ -17,5 +17,3 @@
 # Mac OS
 *.DS_Store
 
-# Folder Vars with .mat variables
-/Vars
