@@ -17,3 +17,7 @@
 # Mac OS
 *.DS_Store
 
+# Folder Vars with .mat variables
+/Vars/*
+# except for 
+!/Vars/readme.md
